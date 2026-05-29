@@ -200,27 +200,29 @@ pre {
     font-weight: 700;
     color: #e4e4e7;
 }
-.speech-bubble::before {
+.speech-bubble::before {  /* red outer tail, pointing left toward the parrot */
     content: '';
     position: absolute;
-    bottom: -12px;
-    left: 30px;
+    left: -12px;
+    top: 50%;
+    transform: translateY(-50%);
     width: 0;
     height: 0;
-    border-left: 12px solid transparent;
-    border-right: 12px solid transparent;
-    border-top: 12px solid #b51600;
+    border-top: 12px solid transparent;
+    border-bottom: 12px solid transparent;
+    border-right: 12px solid #b51600;
 }
-.speech-bubble::after {
+.speech-bubble::after {  /* surface inner tail, painted on top -> bordered point */
     content: '';
     position: absolute;
-    bottom: -9px;
-    left: 32px;
+    left: -9px;
+    top: 50%;
+    transform: translateY(-50%);
     width: 0;
     height: 0;
-    border-left: 10px solid transparent;
-    border-right: 10px solid transparent;
-    border-top: 10px solid #1a1a1a;
+    border-top: 10px solid transparent;
+    border-bottom: 10px solid transparent;
+    border-right: 10px solid #1a1a1a;
 }
 
 @keyframes parrot-float {
