@@ -1,42 +1,53 @@
 {% extends "layout.html" %}
 {% set activepage = "about" %}
-{% block title %}Messenger Secure - About{% endblock %}
+{% block title %}secret — about{% endblock %}
 
 {% block content %}
-<h1 class="border-bottom border-info">About</h1>
+<h1 class="border-bottom border-info pb-2">About</h1>
 
 <h2 class="py-3">Summary</h2>
-Msgur (pronounced « messenger ») is a web-service providing a way to host a message in a secure way,
-only readable a single time, permanently destructed on read. Messages are encrypted and no-one except the
-first one with the url can read it.
+<strong>secret</strong> is a one-time secret service: it hosts a message that can be read exactly once,
+then is permanently destroyed on read. Messages are encrypted in your browser and no-one — not even the
+server operator — can read them without the link. You can also set how long an unread secret survives
+before it self-destructs (up to 30 days).
 
 <h2 class="py-3">Technical details</h2>
-Message are encrypted using AES algorythm. The cipher key is never sent to the server (client-side generated)
-and the client generate the url. The server doesn't know the key and never receive it.
+Messages are encrypted using the AES algorithm. The cipher key is generated client-side and is never sent
+to the server; the client builds the URL. The server doesn't know the key and never receives it.
 
 Workflow:
 <ul>
-<li>The user write his message, then clic on "Encrypt and Send" button</li>
-<li>A key (uuid4 derivated) is generated, client-side (in the browser)</li>
+<li>You write your message, then click the "Encrypt &amp; get link" button</li>
+<li>A key (uuid4 derived) is generated, client-side (in the browser)</li>
 <li>The message is encrypted using that key (client-side in the browser)</li>
 <li>The encrypted message (and nothing else) is sent to the server to store it</li>
-<li>The server reply with a unique id matching with the message</li>
-<li>The reader URL is generated (client-side in the browser) using the returned id and the key</li>
+<li>The server replies with a unique id matching the message</li>
+<li>The reader URL is generated client-side using the returned id and the key</li>
 </ul>
 
 You need to know the <code>id</code> and the <code>key</code> to get the message and decrypt it.<br>
-The server doesn't know the key, it's not possible for anyone who have access to the server to decrypt
-a message without the key, even the administrator. The key is only available to the creator, on his browser.
+The server doesn't know the key, so no-one with access to the server — not even the administrator — can
+decrypt a message without it. The key is only available to the creator, in their browser.
 <br>
-When a request to the message is made, the message is deleted from the database, permanently.
+When the message is requested, it is deleted from the database, permanently. If it isn't read before its
+expiry, it is destroyed anyway.
 
-<h2 class="py-3">How can I ensure you're not cheating ?</h2>
-Just use your browser inspector, you can check network activity and you'll see that the key
-is never sent to the server.
+<h2 class="py-3">How can I be sure you're not cheating?</h2>
+Just use your browser inspector: check the network activity and you'll see that the key is never sent to
+the server.
 
 <h2 class="py-3">Source code</h2>
-Code is open source and can be found on github: <a href="https://github.com/maxux/msgur" target="_blank">maxux/msgur</a>
+This is a Cybernoob-branded fork. Original project:
+<a href="https://github.com/maxux/msgur" target="_blank" rel="noopener">maxux/msgur</a> &middot;
+fork: <a href="https://github.com/no0be/msgur" target="_blank" rel="noopener">no0be/msgur</a>.
 
-<h2 class="py-3">Cookies</h3>
+<h2 class="py-3">Credits</h2>
+<strong>secret</strong> is built on <a href="https://github.com/maxux/msgur" target="_blank" rel="noopener">msgur</a>,
+the original one-time-secret project (idea and implementation) by
+<strong>Maxime Daniel</strong> (<a href="https://github.com/maxux" target="_blank" rel="noopener">@maxux</a>) —
+huge thanks to him. Cybernoob branded and extended it (theme, native server-enforced expiry, copy);
+the zero-knowledge crypto is unchanged from upstream.
+
+<h2 class="py-3">Cookies</h2>
 There are no cookies used at all.
 {% endblock %}
