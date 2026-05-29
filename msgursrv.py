@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import datetime
@@ -7,6 +8,7 @@ import sqlite3
 import json
 import base64
 import hashlib
+import subprocess
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, abort
 
@@ -17,32 +19,42 @@ ALLOWED_TTLS = {3600, 21600, 86400, 604800, 2592000}  # 1h, 6h, 1d, 7d, 30d
 DEFAULT_TTL = 604800   # 7 days
 MAX_TTL = 2592000      # 30 days (hard cap)
 
+# version/revision shown in the footer, derived from git at runtime. the
+# deployed clone is a detached HEAD at a SHA, so we use `git describe` (which
+# resolves to the tag, e.g. v1.0.0) rather than reading .git/HEAD. the fallback
+# covers a deploy without git metadata.
+REPO_URL = "https://github.com/no0be/msgur"
+_FALLBACK_VERSION = "v1.0.0"
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
 class Msgur:
     def __init__(self):
         self.app = Flask(__name__, static_url_path='/static')
         self.app.url_map.strict_slashes = False
 
-        self.gitsha = self.gitsharoot()
-        print(f"[+] running code revision: {self.gitsha}")
+        self.revision = self.gitversion()
+        self.revision_url = self.github_url(self.revision)
+        print(f"[+] running code revision: {self.revision}")
 
-    def gitsharoot(self):
+    def gitversion(self):
+        # derive the version from git: the tag (e.g. v1.0.0) when HEAD sits on
+        # one, otherwise the short SHA via --always (robust in detached HEAD).
+        # falls back to a hardcoded version when git is unavailable.
         try:
-            ref = ""
+            result = subprocess.run(
+                ["git", "describe", "--tags", "--always"],
+                cwd=APP_DIR, capture_output=True, text=True, timeout=3)
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        return _FALLBACK_VERSION
 
-            with open(".git/HEAD", "r") as f:
-                head = f.read()
-                if not head.startswith("ref:"):
-                    return None
-
-                ref = head[5:].strip()
-
-            with open(f".git/{ref}", "r") as f:
-                sha = f.read()
-                return sha[:8]
-
-        except Exception as e:
-            print(e)
-            return None
+    def github_url(self, version):
+        # a release tag links to its GitHub release page; a bare SHA to its commit.
+        if re.match(r"^v?\d+\.\d+", version):
+            return f"{REPO_URL}/releases/tag/{version}"
+        return f"{REPO_URL}/commit/{version}"
 
     def idgen(self):
         uid = uuid.uuid4().bytes
@@ -144,17 +156,17 @@ class Msgur:
 
         @self.app.route('/about', methods=['GET'])
         def about():
-            content = {"revision": self.gitsha}
+            content = {"revision": self.revision, "revision_url": self.revision_url}
             return render_template("about.html", **content)
 
         @self.app.route('/<hash>', methods=['GET'])
         def index_hash(hash):
-            content = {"revision": self.gitsha}
+            content = {"revision": self.revision, "revision_url": self.revision_url}
             return render_template("fetch.html", **content)
 
         @self.app.route('/', methods=['GET'])
         def index():
-            content = {"revision": self.gitsha}
+            content = {"revision": self.revision, "revision_url": self.revision_url}
             return render_template("create.html", **content)
 
 if __name__ == "msgursrv":
