@@ -1,3 +1,11 @@
 db/msgur.sqlite3
 __pycache__
 .runtime
+
+# jarvis orchestration metadata — read from disk by the catalog, never committed
+jarvis.yaml
+.claude/
+
+# python virtualenvs
+.venv/
+venv/
