@@ -1,20 +1,37 @@
 {% extends "layout.html" %}
 {% set activepage = "home" %}
-{% block title %}Messenger Secure - Create{% endblock %}
+{% block title %}secret — one-time secret{% endblock %}
 
 {% block content %}
-<h1 class="border-bottom border-muted">Self-destructing encrypted message</h1>
+<div class="d-flex align-items-center gap-3 mb-4" id="hero">
+    <img src="/static/img/logo-parrot-centered-alpha.png" alt="Cybernoob parrot" class="parrot-float" width="96" height="96">
+    <div class="speech-bubble bubble-pop">Read once, then it's gone. The key never touches the server.</div>
+</div>
 
-<p class="alert alert-info">Message is encrypted before being sent to the server and decryption key
-is never sent to the server. More information in <a href="/about">about</a> page.</p>
+<h1 class="border-bottom border-muted pb-2">One-time secret</h1>
+<p class="text-secondary">Read once. Gone. The server never sees your key.</p>
+
+<p class="alert alert-info">The message is encrypted in your browser before it's sent, and the decryption
+key never leaves your device. More details on the <a href="/about">about</a> page.</p>
 
 <div class="h-100 p-4 text-white bg-dark rounded-3" id="creator">
     <div class="mb-3">
         <textarea id="message" class="bg-dark text-white form-control"></textarea>
     </div>
 
+    <div class="mb-3">
+        <label for="ttl" class="ttl-label d-block mb-1">Self-destruct after</label>
+        <select id="ttl" class="form-select w-auto">
+            <option value="3600">1 hour</option>
+            <option value="21600">6 hours</option>
+            <option value="86400">1 day</option>
+            <option value="604800" selected>7 days</option>
+            <option value="2592000">30 days (max)</option>
+        </select>
+    </div>
+
     <div>
-        <button type="button" class="btn btn-primary" onclick="msgur(true);">Encrypt and Send</button>
+        <button type="button" class="btn btn-primary" onclick="msgur(true);">Encrypt &amp; get link</button>
         <button type="button" class="btn btn-secondary" onclick="msgur(false);">Encrypt Only</button>
     </div>
 </div>

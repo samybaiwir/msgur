@@ -33,8 +33,11 @@ function msgur(send) {
         $("#encrypted").html("Encrypted: " + data.encrypted);
     }
 
+    let ttl = parseInt($("#ttl").val(), 10);
+
     let payload = {
-        message: data.encrypted
+        message: data.encrypted,
+        ttl: ttl
     };
 
     if(send == true) {
@@ -71,7 +74,7 @@ function fetch(context) {
         context: context,
         statusCode: {
             404: function() {
-                $("#error").removeClass("d-none").html("Message not found");
+                $("#error").removeClass("d-none").html("This secret doesn't exist, or it has already been read or has expired.");
                 $("#msgroot").hide();
             }
         },
@@ -79,7 +82,7 @@ function fetch(context) {
     }).done(function(data) {
         let message = decode(data.message, this.key);
         $("#decrypt").text(message);
-        $("#success").removeClass("d-none").html("Message retreived and destructed");
+        $("#success").removeClass("d-none").html("Secret retrieved — and destroyed.");
     });
 
 }

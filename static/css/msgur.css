@@ -1,21 +1,258 @@
+/* cybernoob theme for secret (msgur fork) — dark, mascot-forward.
+   Keeps the Bootstrap grid; overrides the look with brand tokens. */
+
 :root {
-    --body-font: "Nunito", sans-serif;
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --elevated: #2e2e2e;
+    --input-bg: #1e1e1e;
+    --accent: #b51600;
+    --accent-hover: #cc0000;
+    --text: #e4e4e7;
+    --text-secondary: #a1a1aa;
+    --text-dim: #71717a;
+    --term-green: #22c55e;
+
+    --font-body: 'Ubuntu', system-ui, -apple-system, sans-serif;
+    --font-head: 'Montserrat', sans-serif;
+    --font-mono: 'JetBrains Mono', Consolas, 'Lucida Console', monospace;
 }
 
 body {
-    font-family: var(--body-font);
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--text);
 }
 
-textarea {
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-head);
+    font-weight: 800;
+    color: var(--text);
+}
+
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+
+/* header + terminal wordmark */
+header.bg-dark {
+    background: var(--surface) !important;
+    border-bottom: 1px solid var(--elevated);
+}
+.wordmark {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 1.5rem;
+    letter-spacing: -0.5px;
+}
+.wordmark .sym { color: var(--accent); }
+.wordmark .name { color: #ffffff; }
+
+/* surfaces */
+.bg-dark {
+    background: var(--surface) !important;
+    color: var(--text) !important;
+}
+.rounded-3 { border-radius: 14px !important; }
+.border-top { border-color: var(--elevated) !important; }
+
+/* nav */
+.nav-item a,
+.nav-link { color: var(--text-secondary); }
+.nav-link:hover { color: #fff; }
+.nav-link.active {
+    color: #fff !important;
+    background: var(--accent) !important;
+}
+
+/* inputs */
+textarea,
+.form-control,
+.form-select {
     width: 100%;
-    height: 200px;
-    font-family: Consolas, Lucida Console, monospace;
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--elevated);
+    border-radius: 10px;
+}
+textarea,
+textarea.bg-dark,
+.form-control.bg-dark {
+    background: var(--input-bg) !important;
+    color: var(--text) !important;
+}
+textarea {
+    height: 220px;
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+}
+.form-control:focus,
+.form-select:focus,
+textarea:focus {
+    background: var(--input-bg);
+    color: var(--text);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 0.15rem rgba(181, 22, 0, 0.25);
+    outline: none;
+}
+.form-control::placeholder { color: var(--text-dim); }
+.input-group-text {
+    background: var(--elevated);
+    color: var(--text);
+    border: 1px solid var(--elevated);
 }
 
+/* buttons */
+.btn {
+    font-family: var(--font-head);
+    font-weight: 700;
+    border-radius: 10px;
+}
+.btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    box-shadow: 0 0 16px rgba(181, 22, 0, 0.35);
+}
+.btn-primary:hover,
+.btn-primary:focus {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: #fff;
+}
+.btn-secondary {
+    background: transparent;
+    border: 1px solid var(--elevated);
+    color: var(--text-secondary);
+}
+.btn-secondary:hover {
+    background: var(--elevated);
+    border-color: var(--accent);
+    color: #fff;
+}
+.btn-success {
+    background: transparent;
+    border: 1px solid var(--term-green);
+    color: var(--term-green);
+}
+.btn-success:hover {
+    background: var(--term-green);
+    color: #0f0f0f;
+}
+
+/* alerts */
+.alert {
+    border-radius: 10px;
+    border: 1px solid var(--elevated);
+}
+.alert-info {
+    background: rgba(46, 46, 46, 0.4);
+    color: var(--text-secondary);
+    border-color: var(--elevated);
+}
+.alert-danger {
+    background: rgba(204, 0, 0, 0.12);
+    color: #ff6b6b;
+    border-color: var(--accent);
+}
+.alert-success {
+    background: rgba(34, 197, 94, 0.10);
+    color: var(--term-green);
+    border-color: rgba(34, 197, 94, 0.4);
+}
+
+/* the create-page key/encrypted preview cards reuse .bg-success — neutralize
+   to a surface card with a green hairline so the green hint stays. */
+.bg-success {
+    background: var(--surface) !important;
+    border: 1px solid rgba(34, 197, 94, 0.35) !important;
+}
+
+/* code / pre */
+code {
+    font-family: var(--font-mono);
+    color: var(--term-green);
+    word-break: break-all;
+}
 pre {
     white-space: pre-wrap;
+    font-family: var(--font-mono);
+    color: var(--text);
 }
 
-.nav-item a {
-    color: #ffffff;
+/* expiry select label */
+.ttl-label {
+    font-family: var(--font-head);
+    font-weight: 700;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* ── parrot + comic speech bubble (cybernoob signature, from brand.md) ──
+   Adapted to a single element: ::before = red outer tail, ::after = surface
+   inner tail painted on top, producing the bordered point. */
+.speech-bubble {
+    position: relative;
+    background: #1a1a1a;
+    border: 2px solid #b51600;
+    border-radius: 16px;
+    padding: 12px 20px;
+    font-family: 'Montserrat', sans-serif;
+    font-weight: 700;
+    color: #e4e4e7;
+}
+.speech-bubble::before {
+    content: '';
+    position: absolute;
+    bottom: -12px;
+    left: 30px;
+    width: 0;
+    height: 0;
+    border-left: 12px solid transparent;
+    border-right: 12px solid transparent;
+    border-top: 12px solid #b51600;
+}
+.speech-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -9px;
+    left: 32px;
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 10px solid #1a1a1a;
+}
+
+@keyframes parrot-float {
+    0%, 100% { transform: translateY(0) rotate(0); }
+    25% { transform: translateY(-8px) rotate(1deg); }
+    75% { transform: translateY(4px) rotate(-1deg); }
+}
+.parrot-float { animation: parrot-float 4s ease-in-out infinite; }
+
+@keyframes bubble-pop {
+    0% { transform: scale(.5); opacity: 0; }
+    70% { transform: scale(1.05); }
+    100% { transform: scale(1); opacity: 1; }
+}
+.bubble-pop { animation: bubble-pop .5s cubic-bezier(.34, 1.56, .64, 1) forwards; }
+
+/* footer + low-opacity parrot watermark */
+footer {
+    position: relative;
+    color: var(--text-dim);
+}
+footer a {
+    color: var(--text-secondary);
+    text-decoration: none;
+}
+footer a:hover { color: #fff; }
+.parrot-watermark {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    width: 90px;
+    opacity: 0.05;
+    pointer-events: none;
+    user-select: none;
 }
