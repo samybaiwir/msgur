@@ -1,13 +1,14 @@
-// msgur client crypto — AES-256-GCM, 256-bit random key, authenticated.
-// SPIKE (feat/crypto-gcm): swaps the old CryptoJS AES-CBC passphrase scheme for
-// WebCrypto AES-256-GCM in the byte format pinned in spike/FORMAT.md. The server
-// still only ever sees ciphertext; the key lives only in the URL #fragment.
+// secret — client-side crypto. AES-256-GCM with a 256-bit random key, native
+// WebCrypto (no library). The server only ever sees the ciphertext; the key
+// is generated here and lives only in the URL #fragment, so it is never sent.
+// Byte format (key in fragment, payload = base64url(iv‖ciphertext‖tag)) is
+// documented on the /api page and in the README.
 let hosturl = location.protocol + "//" + location.host + "/";
 
 const KEY_LEN = 32; // AES-256
 const IV_LEN = 12;  // 96-bit GCM nonce
 
-// --- base64url, no padding (byte-identical to spike/crypto.py & spike/oracle.mjs) ---
+// --- base64url, no padding ---
 function bytesToB64url(bytes) {
     let bin = "";
     const CHUNK = 0x8000; // chunk to avoid String.fromCharCode stack overflow on big arrays
@@ -54,44 +55,41 @@ async function decode(payloadB64url, keyB64url) {
     return new TextDecoder().decode(plaintext);
 }
 
+// encrypt the textarea, show the key/ciphertext preview, and (when send) POST
+// the ciphertext to /create and reveal the share URL. The key never leaves here.
 async function msgur(send) {
     try {
         let message = $("#message").val();
         let data = await create(message);
 
+        $("#error").addClass("d-none").text("");
         $("#summary").removeClass("d-none").show();
-
-        if (send == true) {
-            $("#creator").hide();
-            $("#url-box").removeClass("d-none").show();
-        }
-
         $("#key").html("Key: " + data.key);
+        $("#encrypted").html("Encrypted: " +
+            (send ? data.encrypted.substr(0, 250) + " [truncated]" : data.encrypted));
 
-        if (send) {
-            $("#encrypted").html("Encrypted: " + data.encrypted.substr(0, 250) + " [truncated]");
-        } else {
-            $("#encrypted").html("Encrypted: " + data.encrypted);
+        if (send !== true) {
+            return; // "Encrypt only" — show the preview, don't store anything
         }
 
         let ttl = parseInt($("#ttl").val(), 10);
 
-        let payload = {
-            message: data.encrypted,
-            ttl: ttl
-        };
-
-        if (send == true) {
-            $.ajax("/create", {
-                data: JSON.stringify(payload),
-                contentType: 'application/json',
-                type: 'POST',
-                context: data,
-
-            }).done(function(resp) {
-                $("#url").val(hosturl + resp.id + "#" + this.key);
-            });
-        }
+        $.ajax("/create", {
+            data: JSON.stringify({ message: data.encrypted, ttl: ttl }),
+            contentType: "application/json",
+            type: "POST",
+            context: data,
+        }).done(function (resp) {
+            // only now reveal the link — the secret is actually stored
+            $("#creator").hide();
+            $("#url-box").removeClass("d-none").show();
+            $("#url").val(hosturl + resp.id + "#" + this.key);
+        }).fail(function (xhr) {
+            let msg = xhr.status === 429
+                ? "Rate limit reached — too many secrets created from here. Wait a moment and try again."
+                : "Could not store the secret (server returned " + xhr.status + "). Please try again.";
+            $("#error").removeClass("d-none").text(msg);
+        });
     } catch (e) {
         console.error(e);
         $("#error").removeClass("d-none").text("Encryption failed: " + e);
@@ -110,7 +108,7 @@ function copyurl() {
     $("#copy-btn").html("Copied !");
 }
 
-// renamed from fetch() to avoid shadowing the global fetch
+// named fetchSecret (not fetch) so it doesn't shadow the global fetch()
 function fetchSecret(context) {
     $("#mid").html("ID : " + context.id);
     $("#key").html("Key: " + context.key);
@@ -125,10 +123,10 @@ function fetchSecret(context) {
         },
 
     }).done(function(data) {
-        // capture the bound key before the first await (this rebinds inside the async fn)
+        // capture the bound key before the first await (this rebinds inside the async then)
         const key = this.key;
         decode(data.message, key).then(function(message) {
-            // data-done sentinel lets a headless check tell "decrypted" from "raced too early"
+            // data-done marks decrypt completion (lets a headless check distinguish done from raced-too-early)
             $("#decrypt").text(message).attr("data-done", "ok");
             $("#success").removeClass("d-none").html("Secret retrieved — and destroyed.");
         }).catch(function(e) {
