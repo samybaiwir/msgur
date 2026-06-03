@@ -11,6 +11,9 @@ import hashlib
 import subprocess
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, abort
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # native expiry, server-enforced. the client picks from ALLOWED_TTLS via the
 # dropdown, but whatever reaches /create is hard-clamped to MAX_TTL so a stored
@@ -18,6 +21,15 @@ from flask import Flask, request, jsonify, render_template, abort
 ALLOWED_TTLS = {3600, 21600, 86400, 604800, 2592000}  # 1h, 6h, 1d, 7d, 30d
 DEFAULT_TTL = 604800   # 7 days
 MAX_TTL = 2592000      # 30 days (hard cap)
+
+# rate-limit defaults (overridable via env, read per-request so ops can retune
+# without a code change). the create path is the DoS surface (it writes the DB);
+# both the GUI POST /create and the API POST /api/v1/secret share one per-IP
+# bucket. fetch gets a looser cap to slow id-enumeration. counters live in
+# Flask-Limiter's default memory:// store -> per-gunicorn-worker (see the deploy
+# notes in .claude/contexts/technical.md: run a single worker for an exact limit).
+DEFAULT_RATELIMIT_CREATE = "10 per minute; 100 per hour"
+DEFAULT_RATELIMIT_FETCH = "60 per minute"
 
 # version/revision shown in the footer, derived from git at runtime. the
 # deployed clone is a detached HEAD at a SHA, so we use `git describe` (which
@@ -31,6 +43,33 @@ class Msgur:
     def __init__(self):
         self.app = Flask(__name__, static_url_path='/static')
         self.app.url_map.strict_slashes = False
+
+        # optional, default-OFF proxy trust. behind a reverse proxy (nginx on
+        # cloud1) the socket peer is the proxy, so without this the rate-limiter
+        # keys every client on the proxy IP -> one global bucket. MSGUR_TRUST_PROXY
+        # = number of trusted proxy hops (1 for the cloud1 vhost). left at 0 when
+        # the app faces clients directly, so X-Forwarded-For can't be spoofed to
+        # forge IPs and dodge the limit.
+        try:
+            trust_proxy = int(os.environ.get("MSGUR_TRUST_PROXY", "0"))
+        except ValueError:
+            trust_proxy = 0
+        if trust_proxy > 0:
+            self.app.wsgi_app = ProxyFix(
+                self.app.wsgi_app,
+                x_for=trust_proxy, x_proto=trust_proxy, x_host=trust_proxy)
+
+        # in-memory per-IP rate limiting. storage_uri is set explicitly to the
+        # default memory:// only to silence the "implicit storage" warning.
+        self.limiter = Limiter(
+            key_func=get_remote_address,
+            app=self.app,
+            storage_uri="memory://")
+        # one shared bucket across both create entry points (GUI + API): the
+        # intent is "this client may create N secrets/min", not N per endpoint.
+        self.create_limit = self.limiter.shared_limit(
+            lambda: os.environ.get("MSGUR_RATELIMIT_CREATE", DEFAULT_RATELIMIT_CREATE),
+            scope="create")
 
         self.revision = self.gitversion()
         self.revision_url = self.github_url(self.revision)
@@ -83,6 +122,32 @@ class Msgur:
         db.commit()
         db.close()
 
+    def store_secret(self, message, ttl_raw):
+        # the single create seam shared by the GUI POST /create and the API
+        # POST /api/v1/secret. resolves the time-to-live (coerce -> allow-list
+        # -> hard-clamp) then stores the opaque ciphertext. junk/non-positive
+        # ttl -> default; anything above the cap -> cap. the stored expiry is
+        # never beyond now + 30 days, whatever the client sends.
+        try:
+            ttl = int(ttl_raw)
+        except (TypeError, ValueError):
+            ttl = DEFAULT_TTL
+
+        if ttl not in ALLOWED_TTLS:
+            ttl = DEFAULT_TTL if ttl <= 0 else min(ttl, MAX_TTL)
+
+        ttl = min(ttl, MAX_TTL)
+        expires_at = int(time.time()) + ttl
+
+        mid = self.idgen()
+        db = sqlite3.connect("db/msgur.sqlite3")
+        c = db.cursor()
+        c.execute('INSERT INTO messages (id, message, expires_at) VALUES (?, ?, ?)',
+                  (mid, message, expires_at))
+        db.commit()
+        db.close()
+        return mid, expires_at
+
     def routes(self):
         self.initdb()
 
@@ -91,6 +156,7 @@ class Msgur:
             return {'now': datetime.utcnow()}
 
         @self.app.route('/fetch/<id>', methods=['GET'])
+        @self.limiter.limit(lambda: os.environ.get("MSGUR_RATELIMIT_FETCH", DEFAULT_RATELIMIT_FETCH))
         def fetch(id):
             db = sqlite3.connect("db/msgur.sqlite3")
 
@@ -125,33 +191,10 @@ class Msgur:
             return jsonify({"message": message})
 
         @self.app.route('/create', methods=['POST'])
+        @self.create_limit
         def create():
-            db = sqlite3.connect("db/msgur.sqlite3")
-
-            mid = self.idgen()
             payload = request.get_json()
-            message = payload["message"]
-
-            # resolve the time-to-live: coerce, validate against the allowed
-            # list, then hard-clamp. junk or non-positive -> default; anything
-            # above the cap -> cap. the stored expiry is never beyond now + 30d.
-            try:
-                ttl = int(payload.get("ttl", DEFAULT_TTL))
-            except (TypeError, ValueError):
-                ttl = DEFAULT_TTL
-
-            if ttl not in ALLOWED_TTLS:
-                ttl = DEFAULT_TTL if ttl <= 0 else min(ttl, MAX_TTL)
-
-            ttl = min(ttl, MAX_TTL)
-            expires_at = int(time.time()) + ttl
-
-            c = db.cursor()
-            fields = (mid, message, expires_at,)
-            c.execute('INSERT INTO messages (id, message, expires_at) VALUES (?, ?, ?)', fields)
-            db.commit()
-            db.close()
-
+            mid, _ = self.store_secret(payload["message"], payload.get("ttl", DEFAULT_TTL))
             return jsonify({"id": mid})
 
         @self.app.route('/about', methods=['GET'])
