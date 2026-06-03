@@ -10,7 +10,9 @@ import base64
 import hashlib
 import subprocess
 from datetime import datetime
-from flask import Flask, request, jsonify, render_template, abort
+from flask import request, jsonify, render_template, abort
+from apiflask import APIFlask, Schema
+from apiflask.fields import String, Integer
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -39,10 +41,55 @@ REPO_URL = "https://github.com/no0be/msgur"
 _FALLBACK_VERSION = "v1.0.0"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
+# --- OpenAPI schemas for the zero-knowledge API (apiflask / marshmallow) ---
+
+class SecretIn(Schema):
+    message = String(required=True, metadata={"description":
+        "The AES-256-GCM payload as base64url (no padding): "
+        "base64url(iv[12] || ciphertext || tag[16]). The CLIENT does all the "
+        "crypto; the 256-bit key lives only in the URL #fragment and is NEVER "
+        "sent here, so the server stores an opaque blob it cannot decrypt."})
+    ttl = Integer(required=False, metadata={"description":
+        "Seconds before an unread secret self-destructs. Coerced to the "
+        "allow-list (3600, 21600, 86400, 604800, 2592000) and hard-clamped to "
+        "30 days (2592000). Defaults to 7 days (604800) if omitted."})
+
+
+class SecretOut(Schema):
+    id = String(metadata={"description":
+        "The secret id — the path segment of the read-once URL."})
+    expires_at = Integer(metadata={"description":
+        "Unix epoch seconds at which the secret expires (now + clamped ttl)."})
+    link_prefix = String(metadata={"description":
+        "The read-once URL minus your key: append the base64url key you kept "
+        "client-side to get the full link, i.e. link_prefix + key. The key "
+        "after '#' is the part the server never receives."})
+
+
 class Msgur:
     def __init__(self):
-        self.app = Flask(__name__, static_url_path='/static')
+        # APIFlask is a drop-in Flask subclass: GUI routes behave identically;
+        # only the API route carries @input/@output schemas. docs + spec are on
+        # MULTI-SEGMENT paths so the root catch-all @app.route('/<hash>') can't
+        # shadow them (a single <hash> segment never matches '/api/...').
+        self.app = APIFlask(
+            __name__,
+            title="secret API",
+            version="1.0.0",
+            docs_path='/api/docs',
+            spec_path='/api/openapi.json',
+            static_url_path='/static')
         self.app.url_map.strict_slashes = False
+        # describe the API in the generated spec.
+        self.app.info = {
+            "description":
+                "Zero-knowledge one-time-secret API. The client encrypts "
+                "(AES-256-GCM) and keeps the key in the URL fragment; the server "
+                "only ever stores opaque ciphertext and hands it back exactly "
+                "once. Open — no auth; abuse is bounded by a per-IP rate limit. "
+                "See /api for copy-paste Python / Node / curl examples.",
+        }
 
         # optional, default-OFF proxy trust. behind a reverse proxy (nginx on
         # cloud1) the socket peer is the proxy, so without this the rate-limiter
@@ -156,6 +203,7 @@ class Msgur:
             return {'now': datetime.utcnow()}
 
         @self.app.route('/fetch/<id>', methods=['GET'])
+        @self.app.doc(hide=True)  # GUI/internal route — keep the spec to the public API
         @self.limiter.limit(lambda: os.environ.get("MSGUR_RATELIMIT_FETCH", DEFAULT_RATELIMIT_FETCH))
         def fetch(id):
             db = sqlite3.connect("db/msgur.sqlite3")
@@ -191,49 +239,49 @@ class Msgur:
             return jsonify({"message": message})
 
         @self.app.route('/create', methods=['POST'])
+        @self.app.doc(hide=True)  # the GUI's create path; API clients use /api/v1/secret
         @self.create_limit
         def create():
             payload = request.get_json()
             mid, _ = self.store_secret(payload["message"], payload.get("ttl", DEFAULT_TTL))
             return jsonify({"id": mid})
 
-        @self.app.route('/api/v1/secret', methods=['POST'])
+        @self.app.post('/api/v1/secret')
+        @self.app.input(SecretIn)
+        @self.app.output(SecretOut, status_code=201)
         @self.create_limit
-        def api_secret():
-            # zero-knowledge: the client did ALL the crypto and sends only the
-            # opaque base64url ciphertext. the key lives in the URL #fragment and
-            # is NEVER sent here -> the server cannot read the secret. open API,
-            # no auth: same public surface as the GUI, the rate-limit is the DoS
-            # answer. (the apiflask @input/@output schema is added in the Swagger
-            # commit; this keeps the endpoint + link logic in one reviewable step.)
-            payload = request.get_json(silent=True) or {}
-            message = payload.get("message")
-            if not isinstance(message, str) or not message:
-                return jsonify({"message": "field 'message' (base64url ciphertext) is required"}), 400
+        def api_secret(json_data):
+            # zero-knowledge: json_data["message"] is the opaque base64url
+            # ciphertext; the key never reaches the server. apiflask validates
+            # the input (422 on a bad body) and serializes the output; the
+            # limiter (innermost) shares the per-IP create bucket with /create.
+            mid, expires_at = self.store_secret(
+                json_data["message"], json_data.get("ttl", DEFAULT_TTL))
 
-            mid, expires_at = self.store_secret(message, payload.get("ttl", DEFAULT_TTL))
-
-            # build a host-agnostic link prefix the client appends its key to.
+            # host-agnostic link prefix the client appends its key to.
             # MSGUR_PUBLIC_URL pins the public origin (recommended in production,
             # behind a proxy); otherwise derive it from the request.
             base = (os.environ.get("MSGUR_PUBLIC_URL") or request.host_url).rstrip("/")
-            return jsonify({
+            return {
                 "id": mid,
                 "expires_at": expires_at,
                 "link_prefix": f"{base}/{mid}#",
-            }), 201
+            }
 
         @self.app.route('/about', methods=['GET'])
+        @self.app.doc(hide=True)
         def about():
             content = {"revision": self.revision, "revision_url": self.revision_url}
             return render_template("about.html", **content)
 
         @self.app.route('/<hash>', methods=['GET'])
+        @self.app.doc(hide=True)
         def index_hash(hash):
             content = {"revision": self.revision, "revision_url": self.revision_url}
             return render_template("fetch.html", **content)
 
         @self.app.route('/', methods=['GET'])
+        @self.app.doc(hide=True)
         def index():
             content = {"revision": self.revision, "revision_url": self.revision_url}
             return render_template("create.html", **content)
