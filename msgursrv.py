@@ -197,6 +197,32 @@ class Msgur:
             mid, _ = self.store_secret(payload["message"], payload.get("ttl", DEFAULT_TTL))
             return jsonify({"id": mid})
 
+        @self.app.route('/api/v1/secret', methods=['POST'])
+        @self.create_limit
+        def api_secret():
+            # zero-knowledge: the client did ALL the crypto and sends only the
+            # opaque base64url ciphertext. the key lives in the URL #fragment and
+            # is NEVER sent here -> the server cannot read the secret. open API,
+            # no auth: same public surface as the GUI, the rate-limit is the DoS
+            # answer. (the apiflask @input/@output schema is added in the Swagger
+            # commit; this keeps the endpoint + link logic in one reviewable step.)
+            payload = request.get_json(silent=True) or {}
+            message = payload.get("message")
+            if not isinstance(message, str) or not message:
+                return jsonify({"message": "field 'message' (base64url ciphertext) is required"}), 400
+
+            mid, expires_at = self.store_secret(message, payload.get("ttl", DEFAULT_TTL))
+
+            # build a host-agnostic link prefix the client appends its key to.
+            # MSGUR_PUBLIC_URL pins the public origin (recommended in production,
+            # behind a proxy); otherwise derive it from the request.
+            base = (os.environ.get("MSGUR_PUBLIC_URL") or request.host_url).rstrip("/")
+            return jsonify({
+                "id": mid,
+                "expires_at": expires_at,
+                "link_prefix": f"{base}/{mid}#",
+            }), 201
+
         @self.app.route('/about', methods=['GET'])
         def about():
             content = {"revision": self.revision, "revision_url": self.revision_url}
