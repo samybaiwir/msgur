@@ -1,0 +1,161 @@
+{% extends "layout.html" %}
+{% set activepage = "api" %}
+{% block title %}secret — API & client crypto{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-3 mb-4" id="hero">
+    <img src="/static/img/logo-parrot-centered-alpha.png" alt="Cybernoob parrot" class="parrot-float" width="96" height="96">
+    <div class="speech-bubble bubble-pop">Encrypt it on your side. I just hold the box — and I can't open it. Arrr.</div>
+</div>
+
+<h1 class="border-bottom border-muted pb-2">API &amp; client crypto</h1>
+<p class="text-secondary">One endpoint. No auth, no token, no key on the wire. You do the crypto; the server
+stores an opaque blob and hands it back exactly once.</p>
+
+<p class="alert alert-info">This is the whole point of <strong>secret</strong>: it's
+<strong>zero-knowledge</strong>. The 256-bit key is generated on your machine and lives only in the URL
+<code>#fragment</code> — browsers never send the fragment to the server, and neither should you. So the
+operator (me, the parrot) physically cannot read your secrets. The API is open precisely <em>because</em>
+there's nothing to leak; a per-IP rate limit keeps the database from being spammed.</p>
+
+<h2 class="py-3">The endpoint</h2>
+<p>Interactive docs: <a href="/api/docs">/api/docs</a> (Swagger UI) &middot; machine spec:
+<a href="/api/openapi.json">/api/openapi.json</a> (OpenAPI 3.1).</p>
+
+<p><code>POST /api/v1/secret</code> &nbsp;—&nbsp; JSON in, JSON out. Request:</p>
+<table class="table api-spec-table">
+    <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+    <tbody>
+        <tr><td><code>message</code></td><td>string (required)</td>
+            <td>The base64url payload <code>iv ‖ ciphertext ‖ tag</code> (see the byte format below).
+                <strong>Not your key</strong> — the key never appears in this request.</td></tr>
+        <tr><td><code>ttl</code></td><td>int seconds (optional)</td>
+            <td>Lifetime before an unread secret self-destructs. Coerced to the allow-list
+                (1h / 6h / 1d / 7d / 30d) and <strong>hard-clamped to 30 days</strong>. Default 7 days.</td></tr>
+    </tbody>
+</table>
+
+<p>Response (<code>201 Created</code>):</p>
+<table class="table api-spec-table">
+    <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+    <tbody>
+        <tr><td><code>id</code></td><td>string</td><td>The secret id — the path segment of the read-once URL.</td></tr>
+        <tr><td><code>expires_at</code></td><td>int</td><td>Unix epoch seconds when it expires.</td></tr>
+        <tr><td><code>link_prefix</code></td><td>string</td>
+            <td>The link minus your key. The full shareable URL is
+                <code>link_prefix + key</code> — you append the base64url key you kept client-side.</td></tr>
+    </tbody>
+</table>
+<p class="text-secondary">Exceed the rate limit and you get a clean <code>429</code> (JSON); a malformed body
+gets a <code>422</code>. Reading a secret is a separate one-time <code>GET /fetch/&lt;id&gt;</code> that
+deletes it on read.</p>
+
+<h2 class="py-3">The byte format (v1)</h2>
+<p>One format, every language. Get these bytes right and Python, Node and a browser all interoperate.</p>
+<ul>
+    <li><strong>Primitive:</strong> AES-256-GCM (authenticated encryption — confidentiality <em>and</em>
+        tamper-detection).</li>
+    <li><strong>key:</strong> 32 random bytes (256-bit), base64url <strong>no padding</strong> (43 chars).
+        Goes in the URL <code>#fragment</code>. <strong>Never sent to the server.</strong></li>
+    <li><strong>payload:</strong> <code>iv ‖ ciphertext ‖ tag</code>, base64url <strong>no padding</strong>.
+        This is the <code>message</code> field; the server stores it verbatim.</li>
+</ul>
+{% raw %}
+<pre class="code-block"><code>payload bytes:
++----------------+------------------------+----------------+
+| iv (12 bytes)  | ciphertext (N bytes)   | tag (16 bytes) |
++----------------+------------------------+----------------+
+ 0              12                      12+N           12+N+16</code></pre>
+{% endraw %}
+<ul>
+    <li><strong>iv / nonce:</strong> <strong>12 bytes</strong> (96-bit), random per message. 12 is mandatory
+        — a non-96-bit nonce makes the two stacks derive it differently and diverge.</li>
+    <li><strong>tag:</strong> <strong>16 bytes</strong> (128-bit). Both Python <code>AESGCM</code> and
+        WebCrypto already <strong>append</strong> the tag to the ciphertext — never split it by hand.</li>
+    <li><strong>AAD:</strong> none (empty).</li>
+    <li><strong>base64url, no padding:</strong> standard base64 with <code>+/</code> → <code>-_</code> and all
+        <code>=</code> stripped. To <em>decode</em>, re-pad to a multiple of 4 with <code>=</code>
+        <em>first</em> — skipping that is the #1 cross-language bug.</li>
+</ul>
+
+<p>Deterministic test vector (fixed key+iv — for cross-checking your implementation <em>only</em>; real code
+must use random values):</p>
+{% raw %}
+<pre class="code-block"><code>key (hex)        = 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+key (b64url)     = AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8
+iv  (hex)        = 000000000000000000000000
+plaintext        = "hello"
+ciphertext (hex) = 66d9d9b2da
+tag (hex)        = 0e0c4679f3a82524f5e0499271e16f30
+payload (b64url) = AAAAAAAAAAAAAAAAZtnZstoODEZ586glJPXgSZJx4W8w</code></pre>
+{% endraw %}
+
+<h2 class="py-3">Copy-paste</h2>
+
+<h3 class="py-2">Python <span class="text-secondary" style="font-size:0.9rem">(<code>pip install cryptography</code>)</span></h3>
+{% raw %}
+<pre class="code-block"><code>import os, json, base64, urllib.request
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+def b64url(b): return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+secret = "the eagle lands at midnight"
+key = os.urandom(32)                       # 256-bit key — stays on your machine
+iv  = os.urandom(12)                       # 96-bit GCM nonce, random per message
+ct  = AESGCM(key).encrypt(iv, secret.encode(), None)   # returns ciphertext || tag
+payload = b64url(iv + ct)                  # iv || ciphertext || tag -> base64url
+
+req = urllib.request.Request(
+    "https://secret.cybernoob.io/api/v1/secret",
+    data=json.dumps({"message": payload, "ttl": 86400}).encode(),
+    headers={"Content-Type": "application/json"})
+resp = json.load(urllib.request.urlopen(req))
+
+print(resp["link_prefix"] + b64url(key))   # append the key the server never saw</code></pre>
+{% endraw %}
+
+<h3 class="py-2">Node <span class="text-secondary" style="font-size:0.9rem">(Node 18+, save as <code>.mjs</code>)</span></h3>
+{% raw %}
+<pre class="code-block"><code>import { webcrypto as crypto } from "node:crypto";
+
+const b64url = (b) =&gt; Buffer.from(b).toString("base64")
+  .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+const secret = "the eagle lands at midnight";
+const key = crypto.getRandomValues(new Uint8Array(32));   // stays on your machine
+const iv  = crypto.getRandomValues(new Uint8Array(12));
+const k   = await crypto.subtle.importKey("raw", key, { name: "AES-GCM" }, false, ["encrypt"]);
+const ct  = new Uint8Array(await crypto.subtle.encrypt(
+              { name: "AES-GCM", iv }, k, new TextEncoder().encode(secret)));  // ct || tag
+
+const payload = new Uint8Array(iv.length + ct.length);    // iv || ct || tag
+payload.set(iv); payload.set(ct, iv.length);
+
+const resp = await fetch("https://secret.cybernoob.io/api/v1/secret", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message: b64url(payload), ttl: 86400 }),
+}).then((r) =&gt; r.json());
+
+console.log(resp.link_prefix + b64url(key));              // append the key</code></pre>
+{% endraw %}
+
+<h3 class="py-2">curl <span class="text-secondary" style="font-size:0.9rem">(the raw HTTP shape)</span></h3>
+<p class="text-secondary">curl can't do AES-GCM itself — encrypt client-side first (e.g. with the Python
+above), then POST the resulting payload. The key <strong>never</strong> goes in this request.</p>
+{% raw %}
+<pre class="code-block"><code>curl -X POST https://secret.cybernoob.io/api/v1/secret \
+  -H "Content-Type: application/json" \
+  -d '{"message": "&lt;base64url-payload&gt;", "ttl": 86400}'
+
+# 201 ->
+# { "id": "AbC123",
+#   "expires_at": 1780000000,
+#   "link_prefix": "https://secret.cybernoob.io/AbC123#" }
+#
+# shareable link = link_prefix + &lt;your-base64url-key&gt;</code></pre>
+{% endraw %}
+
+<p class="text-secondary mt-4">Source: <a href="https://github.com/no0be/msgur" target="_blank" rel="noopener">no0be/msgur</a>,
+a fork of <a href="https://github.com/maxux/msgur" target="_blank" rel="noopener">maxux/msgur</a>.</p>
+{% endblock %}

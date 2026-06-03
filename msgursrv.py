@@ -274,6 +274,14 @@ class Msgur:
             content = {"revision": self.revision, "revision_url": self.revision_url}
             return render_template("about.html", **content)
 
+        @self.app.route('/api', methods=['GET'])
+        @self.app.doc(hide=True)  # the human docs page; the machine spec is /api/openapi.json
+        def api_docs_page():
+            # single-segment literal route: Werkzeug matches it before the
+            # /<hash> catch-all (same as /about), so it is never shadowed.
+            content = {"revision": self.revision, "revision_url": self.revision_url}
+            return render_template("api.html", **content)
+
         @self.app.route('/<hash>', methods=['GET'])
         @self.app.doc(hide=True)
         def index_hash(hash):

@@ -179,6 +179,25 @@ pre {
     color: var(--text);
 }
 
+/* terminal-style code block for the /api docs page: dark, horizontal-scroll
+   (don't wrap code), neutral text so it isn't all-green like inline <code>. */
+pre.code-block {
+    white-space: pre;
+    overflow-x: auto;
+    background: #0a0a0a;
+    border: 1px solid var(--elevated);
+    border-radius: 10px;
+    padding: 16px 18px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+pre.code-block code { color: var(--text); word-break: normal; }
+.api-spec-table th, .api-spec-table td {
+    border-color: var(--elevated) !important;
+    color: var(--text);
+    vertical-align: top;
+}
+
 /* expiry select label */
 .ttl-label {
     font-family: var(--font-head);

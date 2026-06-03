@@ -12,8 +12,10 @@ server operator — can read them without the link. You can also set how long an
 before it self-destructs (up to 30 days).
 
 <h2 class="py-3">Technical details</h2>
-Messages are encrypted using the AES algorithm. The cipher key is generated client-side and is never sent
-to the server; the client builds the URL. The server doesn't know the key and never receives it.
+Messages are encrypted with <strong>AES-256-GCM</strong>. The cipher key is generated client-side and is never
+sent to the server; the client builds the URL. The server doesn't know the key and never receives it.
+Developers: the byte format and copy-paste Python / Node / curl examples live on the
+<a href="/api">API page</a>.
 
 Workflow:
 <ul>
