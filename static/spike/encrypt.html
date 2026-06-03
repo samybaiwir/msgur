@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- SPIKE-ONLY scaffolding (feat/crypto-gcm). Drives the reverse real-path leg:
+     auto-encrypts the ?plain= query param using the REAL create() from msgur.js
+     (browser crypto.subtle + bytesToB64url) and writes {key,encrypted} to #out so a
+     headless dump-dom can read it. Remove before the real GUI swap. -->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <script src="/static/js/jquery-3.6.0.min.js"></script>
+    <script src="/static/js/msgur.js"></script>
+</head>
+<body>
+    <pre id="out">pending</pre>
+    <script>
+    (async () => {
+        const el = document.getElementById("out");
+        try {
+            const plain = decodeURIComponent(new URLSearchParams(location.search).get("plain") || "");
+            const d = await create(plain);              // the real msgur.js create()
+            el.textContent = JSON.stringify(d);
+            el.setAttribute("data-done", "ok");
+        } catch (e) {
+            el.textContent = "ERR:" + e;
+            el.setAttribute("data-done", "error");
+        }
+    })();
+    </script>
+</body>
+</html>
