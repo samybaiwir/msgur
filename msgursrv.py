@@ -37,7 +37,7 @@ DEFAULT_RATELIMIT_FETCH = "60 per minute"
 # deployed clone is a detached HEAD at a SHA, so we use `git describe` (which
 # resolves to the tag, e.g. v1.0.0) rather than reading .git/HEAD. the fallback
 # covers a deploy without git metadata.
-REPO_URL = "https://github.com/no0be/msgur"
+REPO_URL = "https://github.com/samybaiwir/msgur"
 _FALLBACK_VERSION = "v1.0.0"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 

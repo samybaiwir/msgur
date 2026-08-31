@@ -73,7 +73,7 @@ print(resp["link_prefix"] + b64url(key))   # the key was never sent to the serve
 
 Huge thanks to **Maxime Daniel** ([@maxux](https://github.com/maxux)) for the original idea and
 implementation — [maxux/msgur](https://github.com/maxux/msgur). This fork
-([no0be/msgur](https://github.com/no0be/msgur)) adds the cybernoob branding, native server-enforced expiry,
+([samybaiwir/msgur](https://github.com/samybaiwir/msgur)) adds the cybernoob branding, native server-enforced expiry,
 the open zero-knowledge API + Swagger, and a per-IP rate limit, and modernizes the client crypto to
 AES-256-GCM. The original zero-knowledge design — encrypt client-side, keep the key in the URL fragment — is his.
 
