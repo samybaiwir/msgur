@@ -1,0 +1,9 @@
+# app.yml — msgur: the app's contract with the samyonline edge platform (design #2022). Read by the platform in each
+# release on the host: names, certificate zone and the rate-limit zone come from here, nothing else.
+app: msgur
+workloads:
+  web: { type: service }      # gunicorn on loopback, deployed by the samyonline role msgur (its port comes from the platform)
+environments:
+  prod:
+    names: [secret.cybernoob.io]
+    rate_limits: { create: 30r/m }   # zone msgur_prod_create (platform, http level): the outer wall of the create path

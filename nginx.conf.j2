@@ -1,0 +1,44 @@
+# msgur: reverse proxy to the gunicorn backend (loopback, port from the platform). The platform owns TLS/HSTS,
+# HTTP -> HTTPS, logs and the limit_req zone (app.yml rate_limits); the app owns its content headers (A3).
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {{ names | join(' ') }};
+    ssl_certificate     {{ cert_dir }}/fullchain.pem;
+    ssl_certificate_key {{ cert_dir }}/privkey.pem;
+    include snippets/tls.conf;
+    set $app {{ app }};
+    set $env {{ env.name }};
+
+    # What secret.cybernoob.io sent before the migration, nothing more (A3).
+    add_header X-Frame-Options SAMEORIGIN;
+{% if env.noindex %}
+    include snippets/noindex.conf;
+{% endif %}
+
+    # Cap the size of a single secret.
+    client_max_body_size 1m;
+
+    # Proxy headers at server level (inherited by both locations). X-Forwarded-For is OVERWRITTEN with the peer,
+    # never appended: msgur (MSGUR_TRUST_PROXY=1) trusts the last hop for its per-IP limit; a client must not forge it.
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 90;
+
+    # Create path (GUI POST /create + API POST /api/v1/secret) = the DB-write surface. Outer wall only: the app's
+    # Flask-Limiter (10/min, 100/h per IP) is the precise gate; nginx sheds single-IP floods (3x the app's gate).
+    location ~ ^/(create|api/v1/secret)$ {
+        limit_req        zone={{ app }}_{{ env.name }}_create burst=20 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:{{ services.web.port }};
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:{{ services.web.port }};
+    }
+
+    include snippets/deny-hidden.conf;
+}

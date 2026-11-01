@@ -80,3 +80,9 @@ AES-256-GCM. The original zero-knowledge design — encrypt client-side, keep th
 ## License
 
 MIT — see [LICENSE](LICENSE). Original copyright © 2021 Maxime Daniel; modifications © 2026 Cybernoob SRL.
+
+## Edge contract
+
+`app.yml` and `nginx.conf.j2` at the root are this app's contract with the edge platform that hosts it: the names it
+answers to, its rate-limit zone and its reverse-proxy template. The platform renders the vhost from them and owns TLS,
+HTTP to HTTPS and logs. The service itself (gunicorn) is deployed separately.
