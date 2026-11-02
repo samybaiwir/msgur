@@ -1,0 +1,57 @@
+# Two jobs on the same commit (samyonline #2047, design step 6 E2): the freshness of app/requirements.lock with the
+# install the edge runs (aarch64, hashes, wheels only), and the app imported on that lock (the delivery guard).
+# Portable on purpose: plain shell steps, no secret, contents: read only.
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+env:
+  UV_VERSION: 0.12.24
+  # sha256 of uv-x86_64-unknown-linux-gnu.tar.gz, from the .sha256 file of the 0.12.24 release
+  UV_SHA256: b4dfaef47d491a7296981f8374a4595f55dbf84e8937c8ecd2983574d8bb3da6
+  # = the CPython of the edge toolchain
+  PYTHON_VERSION: 3.13.16
+  UV_NO_CONFIG: "1"
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: uv (pinned, sha256 checked)
+        run: |
+          set -euo pipefail
+          curl -fsSLo /tmp/uv.tgz "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${UV_SHA256}  /tmp/uv.tgz" | sha256sum -c -
+          mkdir -p /tmp/uvbin && tar -xzf /tmp/uv.tgz -C /tmp/uvbin --strip-components=1
+          echo /tmp/uvbin >> "$GITHUB_PATH"
+      - name: Lock fresh
+        run: |
+          set -euo pipefail
+          cd app
+          uv pip compile requirements.txt -o requirements.lock --universal --generate-hashes --python-version 3.13
+          git diff --exit-code -- requirements.lock
+      - name: Install of the edge (aarch64, hashes, wheels only; dry run, no ARM runner)
+        run: |
+          set -euo pipefail
+          uv venv --python "$PYTHON_VERSION" /tmp/v
+          uv pip install --python /tmp/v/bin/python --dry-run --python-platform aarch64-manylinux_2_17 \
+            --only-binary :all: --require-hashes -r app/requirements.lock
+
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: uv (pinned, sha256 checked)
+        run: |
+          set -euo pipefail
+          curl -fsSLo /tmp/uv.tgz "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${UV_SHA256}  /tmp/uv.tgz" | sha256sum -c -
+          mkdir -p /tmp/uvbin && tar -xzf /tmp/uv.tgz -C /tmp/uvbin --strip-components=1
+          echo /tmp/uvbin >> "$GITHUB_PATH"
+      - name: Import the app on the lock (as the delivery guard does)
+        run: |
+          set -euo pipefail
+          uv venv --python "$PYTHON_VERSION" /tmp/v
+          uv pip install --python /tmp/v/bin/python --require-hashes --only-binary :all: -r app/requirements.lock
+          cd app
+          MSGUR_DB_PATH=:memory: PYTHONDONTWRITEBYTECODE=1 /tmp/v/bin/python -c "import msgursrv"
