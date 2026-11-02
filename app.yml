@@ -2,7 +2,7 @@
 # release on the host: names, certificate zone and the rate-limit zone come from here, nothing else.
 app: msgur
 workloads:
-  web: { type: service }      # gunicorn on loopback, deployed by the samyonline role msgur (its port comes from the platform)
+  web: { type: service, source: app/ }   # gunicorn on loopback, delivered from this release by the platform (A9); its port comes from the platform
 environments:
   prod:
     names: [secret.cybernoob.io]

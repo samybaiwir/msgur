@@ -85,4 +85,21 @@ MIT — see [LICENSE](LICENSE). Original copyright © 2021 Maxime Daniel; modifi
 
 `app.yml` and `nginx.conf.j2` at the root are this app's contract with the edge platform that hosts it: the names it
 answers to, its rate-limit zone and its reverse-proxy template. The platform renders the vhost from them and owns TLS,
-HTTP to HTTPS and logs. The service itself (gunicorn) is deployed separately.
+HTTP to HTTPS and logs.
+
+The service (gunicorn) is delivered from the same release as the exposure: one version, one gesture. The code lives
+under `app/` (the `source` of the `web` workload in `app.yml`); the platform builds a runtime holding
+`app/requirements.txt` only, inside the release, and runs `msgursrv:app` with `app/` as its working directory, read
+only. Nothing of the release is ever written by the service.
+
+Settings come from the environment:
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `MSGUR_DB_PATH` | the SQLite database (created at start) | `db/msgur.sqlite3`, relative to the working directory |
+| `MSGUR_REVISION` | the revision shown in the footer (a tag, or a full SHA shown shortened) | `git describe`, else `unknown` |
+| `MSGUR_TRUST_PROXY` | number of trusted reverse-proxy hops (`X-Forwarded-*`) | `0` |
+| `MSGUR_PUBLIC_URL` | public base URL used in the API's `link_prefix` | the request's host |
+| `MSGUR_RATELIMIT_CREATE` / `MSGUR_RATELIMIT_FETCH` | Flask-Limiter limits | `10 per minute; 100 per hour` / `60 per minute` |
+
+Development: `cd app && gunicorn msgursrv:app` (the database lands in `app/db/msgur.sqlite3`, ignored by git).
