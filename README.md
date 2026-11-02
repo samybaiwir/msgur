@@ -89,8 +89,14 @@ HTTP to HTTPS and logs.
 
 The service (gunicorn) is delivered from the same release as the exposure: one version, one gesture. The code lives
 under `app/` (the `source` of the `web` workload in `app.yml`); the platform builds a runtime holding
-`app/requirements.txt` only, inside the release, and runs `msgursrv:app` with `app/` as its working directory, read
+`app/requirements.lock` only, inside the release, and runs `msgursrv:app` with `app/` as its working directory, read
 only. Nothing of the release is ever written by the service.
+
+`app/requirements.txt` holds the bounds; `app/requirements.lock` is compiled from it with exact versions and sha256
+hashes (universal: the edge is aarch64). The edge installs it `--require-hashes --only-binary :all:`, wheels only:
+nothing of this repository is built or run at install (samyonline #2047). Regenerate it after any change of
+`requirements.txt` with the command in its header, from `app/`, with uv 0.12.24 (the toolchain of the edge). The CI
+refuses a stale lock and imports the app on it.
 
 Settings come from the environment:
 
