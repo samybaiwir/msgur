@@ -103,3 +103,6 @@ Settings come from the environment:
 | `MSGUR_RATELIMIT_CREATE` / `MSGUR_RATELIMIT_FETCH` | Flask-Limiter limits | `10 per minute; 100 per hour` / `60 per minute` |
 
 Development: `cd app && gunicorn msgursrv:app` (the database lands in `app/db/msgur.sqlite3`, ignored by git).
+
+Rollback: `update-app.yml -e app=msgur-prod -e version=previous` switches `current` back to the previous release and
+restarts the service on that release's own runtime; the database (`MSGUR_DB_PATH`, outside the release) is untouched.
