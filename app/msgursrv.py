@@ -33,13 +33,19 @@ MAX_TTL = 2592000      # 30 days (hard cap)
 DEFAULT_RATELIMIT_CREATE = "10 per minute; 100 per hour"
 DEFAULT_RATELIMIT_FETCH = "60 per minute"
 
-# version/revision shown in the footer, derived from git at runtime. the
-# deployed clone is a detached HEAD at a SHA, so we use `git describe` (which
-# resolves to the tag, e.g. v1.0.0) rather than reading .git/HEAD. the fallback
-# covers a deploy without git metadata.
+# version/revision shown in the footer. a deployment without git metadata (the
+# samyonline edge platform delivers a release without .git) passes it in
+# MSGUR_REVISION (a tag, or a full SHA shown shortened). otherwise it is derived
+# from git at runtime with `git describe` (the tag, e.g. v1.1.0, or the short
+# SHA). "unknown" when neither is available.
 REPO_URL = "https://github.com/samybaiwir/msgur"
-_FALLBACK_VERSION = "v1.0.0"
+_FALLBACK_VERSION = "unknown"
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# the SQLite database. relative to the working directory by default (the
+# upstream layout: run from this directory); a deployment passes an absolute
+# path outside the code (the edge platform: /var/lib/msgur/msgur.sqlite3).
+DB_PATH = os.environ.get("MSGUR_DB_PATH", "db/msgur.sqlite3")
 
 
 # --- OpenAPI schemas for the zero-knowledge API (apiflask / marshmallow) ---
@@ -118,14 +124,17 @@ class Msgur:
             lambda: os.environ.get("MSGUR_RATELIMIT_CREATE", DEFAULT_RATELIMIT_CREATE),
             scope="create")
 
-        self.revision = self.gitversion()
-        self.revision_url = self.github_url(self.revision)
+        # the deployment's revision first (MSGUR_REVISION), else git. a full SHA
+        # is shown shortened and linked in full.
+        raw = os.environ.get("MSGUR_REVISION", "").strip() or self.gitversion()
+        self.revision = raw[:12] if re.fullmatch(r"[0-9a-f]{40}", raw) else raw
+        self.revision_url = self.github_url(raw)
         print(f"[+] running code revision: {self.revision}")
 
     def gitversion(self):
         # derive the version from git: the tag (e.g. v1.0.0) when HEAD sits on
         # one, otherwise the short SHA via --always (robust in detached HEAD).
-        # falls back to a hardcoded version when git is unavailable.
+        # falls back to _FALLBACK_VERSION when git is unavailable.
         try:
             result = subprocess.run(
                 ["git", "describe", "--tags", "--always"],
@@ -159,7 +168,7 @@ class Msgur:
         # idempotent at boot: create the table on a fresh DB, and add the
         # expires_at column to a pre-existing DB without one (legacy rows keep
         # NULL = non-expiring).
-        db = sqlite3.connect("db/msgur.sqlite3")
+        db = sqlite3.connect(DB_PATH)
         c = db.cursor()
         c.execute("CREATE TABLE IF NOT EXISTS messages (id varchar(32) primary key, message text, added datetime DEFAULT CURRENT_TIMESTAMP, expires_at integer)")
         try:
@@ -187,7 +196,7 @@ class Msgur:
         expires_at = int(time.time()) + ttl
 
         mid = self.idgen()
-        db = sqlite3.connect("db/msgur.sqlite3")
+        db = sqlite3.connect(DB_PATH)
         c = db.cursor()
         c.execute('INSERT INTO messages (id, message, expires_at) VALUES (?, ?, ?)',
                   (mid, message, expires_at))
@@ -206,7 +215,7 @@ class Msgur:
         @self.app.doc(hide=True)  # GUI/internal route — keep the spec to the public API
         @self.limiter.limit(lambda: os.environ.get("MSGUR_RATELIMIT_FETCH", DEFAULT_RATELIMIT_FETCH))
         def fetch(id):
-            db = sqlite3.connect("db/msgur.sqlite3")
+            db = sqlite3.connect(DB_PATH)
 
             c = db.cursor()
 
