@@ -97,6 +97,7 @@ hashes (universal: the edge is aarch64). The edge installs it `--require-hashes 
 nothing of this repository is built or run at install (samyonline #2047). Regenerate it after any change of
 `requirements.txt` with the command in its header, from `app/`, with uv 0.12.24 (the toolchain of the edge). The CI
 refuses a stale lock and imports the app on it.
+A rollback (`-e version=previous`) reaches only a release that carries its lock: one without it is refused before anything moves.
 
 Settings come from the environment:
 
