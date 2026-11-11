@@ -1,10 +1,14 @@
 # Two jobs on the same commit (samyonline #2047, design step 6 E2): the freshness of app/requirements.lock with the
 # install the edge runs (aarch64, hashes, wheels only), and the app imported on that lock (the delivery guard).
-# Portable on purpose: plain shell steps, no secret, contents: read only.
+# Portable on purpose: plain shell steps, no secret, contents: read only. Public repo: stays on pull_request
+# (read-only, no secret), never pull_request_target.
 name: ci
 on: [push, pull_request]
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 env:
   UV_VERSION: 0.12.24
   # sha256 of uv-x86_64-unknown-linux-gnu.tar.gz, from the .sha256 file of the 0.12.24 release
@@ -14,9 +18,13 @@ env:
   UV_NO_CONFIG: "1"
 jobs:
   lock:
-    runs-on: ubuntu-latest
+    # Pinned image, not ubuntu-latest: a runner change is a deliberate commit (#2098).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - name: uv (pinned, sha256 checked)
         run: |
           set -euo pipefail
@@ -38,9 +46,13 @@ jobs:
             --only-binary :all: --require-hashes -r app/requirements.lock
 
   import:
-    runs-on: ubuntu-latest
+    # Pinned image, not ubuntu-latest: a runner change is a deliberate commit (#2098).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
       - name: uv (pinned, sha256 checked)
         run: |
           set -euo pipefail
