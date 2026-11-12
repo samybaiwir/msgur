@@ -3,7 +3,9 @@
 # Portable on purpose: plain shell steps, no secret, contents: read only. Public repo: stays on pull_request
 # (read-only, no secret), never pull_request_target.
 name: ci
-on: [push, pull_request]
+on:
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
